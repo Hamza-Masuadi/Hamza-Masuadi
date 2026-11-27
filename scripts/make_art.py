@@ -18,8 +18,8 @@ OUT = os.path.join(ROOT, "assets", "profile.svg")
 # ------------------------------------------------------------------ content
 USER = "Hamza-Masuadi"
 NAME = "HAMZA MASUADI"
-TAGLINE = "FULL-STACK · WEB · MOBILE"
-TYPING = ["> full-stack developer", "> shipping web & mobile apps end to end", "> from database to app store"]
+TAGLINE = "SOFTWARE ENGINEER"
+TYPING = ["> software engineer", "> shipping web & mobile apps end to end", "> from database to app store"]
 ABOUT = [
     "Building a multi-vendor marketplace: customer, seller,",
     "  courier and admin apps on one backend",
@@ -37,12 +37,10 @@ SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-se
 
 Q = "hide_border=true&disable_animations=true&bg_color=00000000&background=00000000"
 CARDS = {
-    "stats": f"https://github-readme-stats.vercel.app/api?username={USER}&show_icons=true&{Q}"
+    "stats": f"https://github-readme-stats.vercel.app/api?username={USER}&show_icons=true&hide_rank=true&{Q}"
              f"&title_color=ff2bd6&icon_color=00f0ff&text_color=e9dcff&ring_color=ff2bd6",
     "streak": f"https://streak-stats.demolab.com?user={USER}&{Q}&ring=ff2bd6&fire=ffe86b"
               f"&currStreakNum=ffffff&sideNums=ffffff&currStreakLabel=00f0ff&sideLabels=e9dcff&dates=9d8cc4&stroke=3a1466",
-    "graph": f"https://github-readme-activity-graph.vercel.app/graph?username={USER}&bg_color=00000000"
-             f"&color=e9dcff&line=ff2bd6&point=00f0ff&area=true&area_color=ff2bd6&title_color=ff2bd6&hide_border=true",
 }
 
 W = 1200
@@ -63,6 +61,88 @@ def fetch(url):
     text = re.sub(r"opacity\s*:\s*0\s*;", "opacity: 1;", text)  # elements that were waiting to fade in
     data = text.encode()
     return "data:image/svg+xml;base64," + base64.b64encode(data).decode()
+
+
+def contributions():
+    """Reads the public contribution calendar: {(row, col): (date, level, count)}."""
+    url = f"https://github.com/users/{USER}/contributions"
+    req = urllib.request.Request(url, headers={"User-Agent": "profile-art-builder"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        html = r.read().decode("utf-8", "replace")
+    cells = {}
+    for m in re.finditer(r'data-date="([0-9-]+)" id="contribution-day-component-(\d+)-(\d+)" data-level="(\d)"', html):
+        date, row, col, lvl = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+        cells[(row, col)] = [date, lvl, 0]
+    for m in re.finditer(r'for="contribution-day-component-(\d+)-(\d+)"[^>]*>([^<]*)', html):
+        c = re.match(r"\s*([\d,]+) contribution", m.group(3))
+        key = (int(m.group(1)), int(m.group(2)))
+        if c and key in cells:
+            cells[key][2] = int(c.group(1).replace(",", ""))
+    if len(cells) < 300:
+        raise RuntimeError("could not read the contribution calendar")
+    m = re.search(r"([\d,]+)\s+contributions\s+in the last year", html)
+    total = int(m.group(1).replace(",", "")) if m else sum(v[2] for v in cells.values())
+    return cells, total
+
+
+LEVEL = ["#1f0c3d", "#5c1b8a", "#a125b8", "#e62ccf", "#ff6ae6"]   # tops, quiet -> busy
+SIDE = ["#170930", "#3d1260", "#6c1880", "#9c1d8c", "#b8329f"]    # front faces
+
+
+def city_grid(cells, x0, front_y, width):
+    """The contribution grid tilted in 3D: one block per day, busier days stand taller
+    and the blocks rise out of the floor in a wave when the image loads."""
+    MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+    HGT = [0, 7, 16, 28, 44]
+    depth, skew = 13, 7                  # each row further back sits higher and to the right
+    cols = max(c for _, c in cells) + 1
+    gw = (width - 6 * skew) / cols
+    cw, cd = gw - 3.5, depth - 3
+    slant = skew * cd / depth
+    out, clips = [], []
+    for r in range(7):                   # back row first so front rows overlap it
+        ground = front_y - (6 - r) * depth
+        clips.append(f'<clipPath id="crow{r}"><rect x="0" y="0" width="{W}" height="{ground + .5}"/></clipPath>')
+        row = []
+        for c in range(cols):
+            if (r, c) not in cells:
+                continue
+            lvl = cells[(r, c)][1]
+            x, h = x0 + c * gw + (6 - r) * skew, HGT[lvl]
+            top = (f"{x:.1f},{ground - h - cd:.1f} {x + cw:.1f},{ground - h - cd:.1f} "
+                   f"{x + cw - slant:.1f},{ground - h:.1f} {x - slant:.1f},{ground - h:.1f}")
+            front = (f'<rect x="{x - slant:.1f}" y="{ground - h:.1f}" width="{cw:.1f}" height="{h}" fill="{SIDE[lvl]}"/>'
+                     if h else "")
+            glow = ' filter="url(#softglow)"' if lvl == 4 else ""
+            flick = ""
+            if lvl >= 3 and rnd.random() < .25:   # some busy towers glow on and off like windows
+                flick = (f'<animate attributeName="opacity" values="1;.45;1" dur="{rnd.uniform(1.8, 3.5):.1f}s" '
+                         f'begin="-{rnd.uniform(0, 3):.1f}s" repeatCount="indefinite"/>')
+            body = (f'{front}<polygon points="{top}" fill="{LEVEL[lvl]}" stroke="#ff9de9" '
+                    f'stroke-opacity="{.15 + lvl * .15:.2f}" stroke-width=".8"{glow}>{flick}</polygon>')
+            if h:
+                begin = 0.3 + c * 0.045 + (6 - r) * 0.03
+                body = (f'<g transform="translate(0 {h})">{body}<animateTransform attributeName="transform" '
+                        f'type="translate" values="0 {h};0 -3;0 0" keyTimes="0;.75;1" dur=".7s" '
+                        f'begin="{begin:.2f}s" fill="freeze"/></g>')
+            row.append(body)
+        out.append(f'<g clip-path="url(#crow{r})">{"".join(row)}</g>')
+
+    # month labels sit over the back row, so they follow its offset
+    labels, last, last_col = [], None, -9
+    label_y = front_y - 6 * depth - 62
+    for c in range(cols):
+        day = next((cells[(r, c)] for r in range(7) if (r, c) in cells), None)
+        m = int(day[0][5:7])
+        if m != last:
+            if c - last_col >= 3 and c < cols - 2:
+                labels.append(f'<text x="{x0 + c * gw + 6 * skew:.1f}" y="{label_y}" font-family="{MONO}" '
+                              f'font-size="13" fill="#9d8cc4">{MONTHS[m - 1]}</text>')
+                last_col = c
+            last = m
+    floor = (f'<line x1="{x0 - 10}" y1="{front_y + 1}" x2="{x0 + width + 10}" y2="{front_y + 1}" stroke="#ff9de9" '
+             f'stroke-width="1.5" stroke-opacity=".6" filter="url(#softglow)"/>')
+    return "".join(clips) + "".join(labels) + "".join(out) + floor
 
 
 def esc(s):
@@ -115,14 +195,17 @@ def panel(x, y, w, h):
 
 def build():
     imgs = {k: fetch(u) for k, u in CARDS.items()}
+    cells, total = contributions()
 
     # ---- layout (y coordinates)
     HZ = 250                      # header horizon
     TYPE_Y = 470
     AB_Y, AB_H = 530, 300
     ST_Y = AB_Y + AB_H + 40       # stats panel
-    ST_H = 610
-    FT_SKY = ST_Y + ST_H + 40     # footer sky starts
+    ST_H = 310
+    CT_Y = ST_Y + ST_H + 40       # contributions panel
+    CT_H = 330
+    FT_SKY = CT_Y + CT_H + 40     # footer sky starts
     FT_HZ = FT_SKY + 90           # footer horizon
     H = FT_HZ + 140
 
@@ -223,6 +306,7 @@ def build():
 <line x1="0" y1="{FT_HZ}" x2="{W}" y2="{FT_HZ}" stroke="#ff9de9" stroke-width="2" filter="url(#softglow)"/>
 </g>'''
 
+    cal_svg = city_grid(cells, 120, CT_Y + CT_H - 60, 960)
     content = f'''
 <!-- name -->
 <use href="#nm" fill="{CYAN}" opacity=".85" style="mix-blend-mode:screen"><animateTransform attributeName="transform" type="translate" values="{jitter(-4)}" dur="2.3s" calcMode="discrete" repeatCount="indefinite"/></use>
@@ -245,9 +329,19 @@ def build():
 <!-- stats -->
 {panel(80, ST_Y, 1040, ST_H)}
 {glitch_title("▸ STATS", 120, ST_Y + 58)}
-<image href="{imgs["stats"]}" x="100" y="{ST_Y + 85}" width="490" height="200"/>
-<image href="{imgs["streak"]}" x="610" y="{ST_Y + 85}" width="490" height="200"/>
-<image href="{imgs["graph"]}" x="110" y="{ST_Y + 300}" width="980" height="290" preserveAspectRatio="xMidYMid meet"/>
+<image href="{imgs["stats"]}" x="110" y="{ST_Y + 85}" width="420" height="200" preserveAspectRatio="xMinYMid meet"/>
+<image href="{imgs["streak"]}" x="540" y="{ST_Y + 85}" width="560" height="200"/>
+
+<!-- contributions -->
+{panel(80, CT_Y, 1040, CT_H)}
+{glitch_title("▸ CONTRIBUTIONS", 120, CT_Y + 58)}
+<text x="1080" y="{CT_Y + 56}" text-anchor="end" font-family="{MONO}" font-size="18" fill="{YELLOW}" filter="url(#softglow)">{total:,} in the last year</text>
+{cal_svg}
+<g font-family="{MONO}" font-size="12" fill="#9d8cc4">
+  <text x="{1080 - 5 * 18 - 48}" y="{CT_Y + CT_H - 22}" text-anchor="end">less</text>
+  {"".join(f'<rect x="{1080 - (5 - i) * 18 - 40}" y="{CT_Y + CT_H - 33}" width="14" height="14" rx="3" fill="{c}"/>' for i, c in enumerate(["#1f0c3d", "#5c1b8a", "#a125b8", "#e62ccf", "#ff6ae6"]))}
+  <text x="1080" y="{CT_Y + CT_H - 22}" text-anchor="end">more</text>
+</g>
 
 <!-- sign-off -->
 <rect x="390" y="{FT_HZ + 50}" width="420" height="44" rx="6" fill="{BG}" fill-opacity=".85" stroke="{CYAN}" stroke-opacity=".6"/>
